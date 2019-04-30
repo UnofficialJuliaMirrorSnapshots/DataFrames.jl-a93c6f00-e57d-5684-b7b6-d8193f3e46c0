@@ -14,6 +14,7 @@ const ≅ = isequal
     @test isempty(_columns(df))
     @test _columns(df) isa Vector{AbstractVector}
     @test index(df) == Index()
+    @test size(DataFrame!()) == (0,0)
 
     df = DataFrame(Any[CategoricalVector{Union{Float64, Missing}}(zeros(3)),
                    CategoricalVector{Union{Float64, Missing}}(ones(3))],
@@ -21,8 +22,16 @@ const ≅ = isequal
     @test size(df, 1) == 3
     @test size(df, 2) == 2
 
+    df2 = DataFrame!(Any[CategoricalVector{Union{Float64, Missing}}(zeros(3)),
+                     CategoricalVector{Union{Float64, Missing}}(ones(3))],
+                     Index([:x1, :x2]))
+    @test size(df2, 1) == 3
+    @test size(df2, 2) == 2
+
     @test df == DataFrame([CategoricalVector{Union{Float64, Missing}}(zeros(3)),
                            CategoricalVector{Union{Float64, Missing}}(ones(3))])
+    @test df == DataFrame!([CategoricalVector{Union{Float64, Missing}}(zeros(3)),
+                            CategoricalVector{Union{Float64, Missing}}(ones(3))])
     @test df == DataFrame([CategoricalVector{Union{Float64, Missing}}(zeros(3)),
                            CategoricalVector{Union{Float64, Missing}}(ones(3))], [:x1, :x2])
     @test df == DataFrame(Any[CategoricalVector{Union{Float64, Missing}}(zeros(3)),
@@ -37,10 +46,12 @@ const ≅ = isequal
                            CategoricalVector{Union{Float64, Missing}}(ones(3))), (:x1, :x2))
     @test df == DataFrame(x1 = Union{Int, Missing}[0.0, 0.0, 0.0],
                           x2 = Union{Int, Missing}[1.0, 1.0, 1.0])
+    @test df == DataFrame!(x1 = Union{Int, Missing}[0.0, 0.0, 0.0],
+                           x2 = Union{Int, Missing}[1.0, 1.0, 1.0])
     @test df == DataFrame([:x1=>Union{Int, Missing}[0.0, 0.0, 0.0],
                            :x2=>Union{Int, Missing}[1.0, 1.0, 1.0]])
-    @test df == DataFrame((:x1=>Union{Int, Missing}[0.0, 0.0, 0.0],
-                           :x2=>Union{Int, Missing}[1.0, 1.0, 1.0]))
+    @test df == DataFrame!((:x1=>Union{Int, Missing}[0.0, 0.0, 0.0],
+                            :x2=>Union{Int, Missing}[1.0, 1.0, 1.0]))
 
     @test DataFrame([1:3, 1:3]) == DataFrame(Any[1:3, 1:3]) ==
           DataFrame(UnitRange[1:3, 1:3]) == DataFrame(AbstractVector[1:3, 1:3]) ==
@@ -74,6 +85,10 @@ const ≅ = isequal
     @test df[:x1] == df2[:x1]
     @test df[:x2] == df2[:x2]
 
+    @test_throws ArgumentError DataFrame!([0.0 1.0;
+                                           0.0 1.0;
+                                           0.0 1.0])
+
     df2 = DataFrame([0.0 1.0;
                      0.0 1.0;
                      0.0 1.0], [:a, :b])
@@ -81,21 +96,15 @@ const ≅ = isequal
     @test df[:x1] == df2[:a]
     @test df[:x2] == df2[:b]
 
+    @test_throws ArgumentError DataFrame!([0.0 1.0;
+                                           0.0 1.0;
+                                           0.0 1.0], [:a, :b])
+
     @test df == DataFrame(x1 = Union{Float64, Missing}[0.0, 0.0, 0.0],
                           x2 = Union{Float64, Missing}[1.0, 1.0, 1.0])
     @test df == DataFrame(x1 = Union{Float64, Missing}[0.0, 0.0, 0.0],
                           x2 = Union{Float64, Missing}[1.0, 1.0, 1.0],
                           x3 = Union{Float64, Missing}[2.0, 2.0, 2.0])[[:x1, :x2]]
-
-    df = DataFrame(Union{Int, Missing}, 2, 2)
-    @test size(df) == (2, 2)
-    @test eltypes(df) == [Union{Int, Missing}, Union{Int, Missing}]
-
-    df = DataFrame([Union{Int, Missing}, Union{Float64, Missing}], [:x1, :x2], 2)
-    @test size(df) == (2, 2)
-    @test eltypes(df) == [Union{Int, Missing}, Union{Float64, Missing}]
-
-    @test df ≅ DataFrame([Union{Int, Missing}, Union{Float64, Missing}], 2)
 
     @test_throws BoundsError SubDataFrame(DataFrame(A=1), 0:0, :)
     @test_throws ArgumentError SubDataFrame(DataFrame(A=1), 0, :)
@@ -112,6 +121,7 @@ end
 @testset "DataFrame keyword argument constructor" begin
     x = [1,2,3]
     y = [4,5,6]
+
     df = DataFrame(x=x, y=y)
     @test size(df) == (3, 2)
     @test names(df) == [:x, :y]
@@ -132,6 +142,13 @@ end
     @test df.x === x
     @test df.y === y
     @test_throws ArgumentError DataFrame(x=x, y=y, copycols=1)
+
+    df = DataFrame!(x=x, y=y)
+    @test size(df) == (3, 2)
+    @test names(df) == [:x, :y]
+    @test df.x === x
+    @test df.y === y
+    @test_throws ArgumentError DataFrame!(x=x, y=y, copycols=true)
 end
 
 @testset "DataFrame constructor" begin
@@ -166,6 +183,11 @@ end
     @test df1 == df2
     @test df1.x === df2.x
     @test df1.y === df2.y
+
+    df2 = DataFrame!(df1)
+    @test df1 == df2
+    @test df1.x === df2.x
+    @test df1.y === df2.y
 end
 
 @testset "pair constructor" begin
@@ -186,6 +208,10 @@ end
     df = DataFrame(:a=>a, :b=>1, :c=>1:3, copycols=false)
     @test names(df) == [:a, :b, :c]
     @test df.a === a
+
+    df = DataFrame!(:a=>a, :b=>1, :c=>1:3)
+    @test names(df) == [:a, :b, :c]
+    @test df.a === a
 end
 
 @testset "associative" begin
@@ -200,6 +226,10 @@ end
     @test df.a == a
     @test df.a !== a
     df = DataFrame(Dict(:a=>a, :b=>1, :c=>1:3), copycols=false)
+    @test names(df) == [:a, :b, :c]
+    @test df.a === a
+
+    df = DataFrame!(Dict(:a=>a, :b=>1, :c=>1:3))
     @test names(df) == [:a, :b, :c]
     @test df.a === a
 end
@@ -259,6 +289,11 @@ end
     @test df.x1 === x
     @test df.x2 === y
 
+    df = DataFrame!((x, y))
+    @test names(df) == [:x1, :x2]
+    @test df.x1 === x
+    @test df.x2 === y
+
     df = DataFrame((x, y), (:x1, :x2))
     @test names(df) == [:x1, :x2]
     @test df.x1 == x
@@ -275,6 +310,11 @@ end
     @test names(df) == [:x1, :x2]
     @test df.x1 === x
     @test df.x2 === y
+
+    df = DataFrame!((x, y), (:x1, :x2))
+    @test names(df) == [:x1, :x2]
+    @test df.x1 === x
+    @test df.x2 === y
 end
 
 @testset "recyclers" begin
@@ -288,6 +328,13 @@ end
     @test_throws DimensionMismatch DataFrame(A = rand(2,2))
     @test_throws DimensionMismatch DataFrame(A = rand(2,1))
     @test_throws ArgumentError DataFrame([1, 2, 3])
+
+    @test_throws DimensionMismatch DataFrame!(a=1, b=[])
+    @test_throws DimensionMismatch DataFrame!(Any[collect(1:10)], DataFrames.Index([:A, :B]))
+    @test_throws DimensionMismatch DataFrame!(A = rand(2,2))
+    @test_throws DimensionMismatch DataFrame!(A = rand(2,1))
+    @test_throws ArgumentError DataFrame!([1, 2, 3])
+    @test_throws MethodError DataFrame!([1 2; 3 4], copycols=false)
 end
 
 @testset "column types" begin
@@ -302,11 +349,44 @@ end
     @test map(typeof, eachcol(df)) == answer
 end
 
-@testset "categorical constructor" begin
-    df = DataFrame([Int, String], [:a, :b], [false, true], 3)
-    @test !(df[:a] isa CategoricalVector)
-    @test df[:b] isa CategoricalVector
-    @test_throws DimensionMismatch DataFrame([Int, String], [:a, :b], [true], 3)
+@testset "Matrix constructor" begin
+    df = DataFrame([1 2; 3 4])
+    @test size(df) == (2, 2)
+    @test df.x1 == [1, 3]
+    @test df.x2 == [2, 4]
+    @test_throws ArgumentError DataFrame!([1 2; 3 4])
+
+end
+
+@testset "constructor with types" begin
+    df = DataFrame([Union{Int, Missing}, Union{Float64, Missing}, Union{String, Missing}],
+                   [:A, :B, :C], 100)
+    @test size(df, 1) == 100
+    @test size(df, 2) == 3
+    @test typeof(df[1]) == Vector{Union{Int, Missing}}
+    @test typeof(df[2]) == Vector{Union{Float64, Missing}}
+    @test typeof(df[3]) == Vector{Union{String, Missing}}
+    @test all(ismissing, df[1])
+    @test all(ismissing, df[2])
+    @test all(ismissing, df[3])
+
+    df = DataFrame([Union{Int, Missing}, Union{Float64, Missing}], [:x1, :x2], 2)
+    @test size(df) == (2, 2)
+    @test eltypes(df) == [Union{Int, Missing}, Union{Float64, Missing}]
+
+    @test_throws ArgumentError DataFrame!([Union{Int, Missing}, Union{Float64, Missing}],
+                                          [:x1, :x2], 2)
+    @test size(df) == (2, 2)
+    @test eltypes(df) == [Union{Int, Missing}, Union{Float64, Missing}]
+
+    df = DataFrame([Union{Int, Missing}, Union{Float64, Missing}, Union{String, Missing}],
+                   [:A, :B, :C])
+    @test size(df, 1) == 0
+    @test size(df, 2) == 3
+    @test typeof(df[1]) == Vector{Union{Int, Missing}}
+    @test typeof(df[2]) == Vector{Union{Float64, Missing}}
+    @test typeof(df[3]) == Vector{Union{String, Missing}}
+    @test names(df) == [:A, :B, :C]
 end
 
 end # module

@@ -15,17 +15,14 @@ DataFrame(columns::NTuple{N,AbstractVector}, names::NTuple{N,Symbol};
           makeunique::Bool=false, copycols::Bool=true)
 DataFrame(columns::Matrix, names::Vector{Symbol}; makeunique::Bool=false)
 DataFrame(kwargs...)
-DataFrame(pairs::Pair{Symbol}...; makeunique::Bool=false, copycols::Bool=true)
+DataFrame(pairs::NTuple{N, Pair{Symbol, AbstractVector}}; copycols::Bool=true)
 DataFrame() # an empty DataFrame
-DataFrame(t::Type, nrows::Integer, ncols::Integer) # an empty DataFrame of arbitrary size
-DataFrame(column_eltypes::Vector, names::AbstractVector{Symbol}, nrows::Integer;
-          makeunique::Bool=false)
-DataFrame(column_eltypes::Vector, names::AbstractVector{Symbol},
-          categorical::AbstractVector{Bool}, nrows::Integer;
+DataFrame(column_eltypes::Vector, names::AbstractVector{Symbol}, nrows::Integer=0;
           makeunique::Bool=false)
 DataFrame(ds::AbstractDict; copycols::Bool=true)
 DataFrame(table; makeunique::Bool=false, copycols::Bool=true)
 DataFrame(::Union{DataFrame, SubDataFrame}; copycols::Bool=true)
+DataFrame(::GroupedDataFrame)
 ```
 
 **Arguments**
@@ -46,7 +43,8 @@ DataFrame(::Union{DataFrame, SubDataFrame}; copycols::Bool=true)
                   `CategoricalVector`
 * `ds` : `AbstractDict` of columns
 * `table` : any type that implements the
-  [Tables.jl](https://github.com/JuliaData/Tables.jl) interface
+  [Tables.jl](https://github.com/JuliaData/Tables.jl) interface; in particular
+  a tuple or vector of `Pair{Symbol, <:AbstractVector}}` objects is a table.
 * `copycols` : whether vectors passed as columns should be copied; note that
   `DataFrame(kwargs...)` does not support this keyword argument and always copies columns.
 
@@ -212,9 +210,8 @@ DataFrame(columns::AbstractMatrix, cnames::AbstractVector{Symbol} = gennames(siz
     DataFrame(AbstractVector[columns[:, i] for i in 1:size(columns, 2)], cnames,
               makeunique=makeunique, copycols=false)
 
-# Initialize an empty DataFrame with specific eltypes and names
 function DataFrame(column_eltypes::AbstractVector{T}, cnames::AbstractVector{Symbol},
-                   nrows::Integer; makeunique::Bool=false)::DataFrame where T<:Type
+                   nrows::Integer=0; makeunique::Bool=false)::DataFrame where T<:Type
     columns = AbstractVector[elty >: Missing ?
                              fill!(Tables.allocatecolumn(elty, nrows), missing) :
                              Tables.allocatecolumn(elty, nrows)
@@ -223,39 +220,49 @@ function DataFrame(column_eltypes::AbstractVector{T}, cnames::AbstractVector{Sym
                      copycols=false)
 end
 
-# Initialize an empty DataFrame with specific eltypes and names
-# and whether a CategoricalArray should be created
-function DataFrame(column_eltypes::AbstractVector{T}, cnames::AbstractVector{Symbol},
-                   categorical::AbstractVector{Bool}, nrows::Integer;
-                   makeunique::Bool=false)::DataFrame where T<:Type
-    # upcast Vector{DataType} -> Vector{Type} which can hold CategoricalValues
-    updated_types = convert(Vector{Type}, column_eltypes)
-    if length(categorical) != length(column_eltypes)
-        throw(DimensionMismatch("arguments column_eltypes and categorical must have the same length " *
-                                "(got $(length(column_eltypes)) and $(length(categorical)))"))
+"""
+    DataFrame!(args...; kwargs...)
+
+Equivalent to `DataFrame(args...; copycols=false, kwargs...)`.
+
+If `kwargs` contains the `copycols` keyword argument an error is thrown.
+
+### Examples
+
+```jldoctest
+julia> df1 = DataFrame(a=1:3)
+3×1 DataFrame
+│ Row │ a     │
+│     │ Int64 │
+├─────┼───────┤
+│ 1   │ 1     │
+│ 2   │ 2     │
+│ 3   │ 3     │
+
+julia> df2 = DataFrame!(df1)
+
+julia> df1.a === df2.a
+true
+"""
+function DataFrame!(args...; kwargs...)
+    if :copycols in keys(kwargs)
+        throw(ArgumentError("`copycols` keyword argument is not allowed"))
     end
-    for i in eachindex(categorical)
-        categorical[i] || continue
-        elty = CategoricalArrays.catvaluetype(Missings.T(updated_types[i]),
-                                              CategoricalArrays.DefaultRefType)
-        if updated_types[i] >: Missing
-            updated_types[i] = Union{elty, Missing}
-        else
-            updated_types[i] = elty
-        end
-    end
-    return DataFrame(updated_types, cnames, nrows, makeunique=makeunique)
+    DataFrame(args...; copycols=false, kwargs...)
 end
 
-# Initialize empty DataFrame objects of arbitrary size
-function DataFrame(t::Type, nrows::Integer, ncols::Integer)
-    return DataFrame(fill(t, ncols), nrows)
-end
+DataFrame!(columns::AbstractMatrix,
+           cnames::AbstractVector{Symbol} = gennames(size(columns, 2));
+           makeunique::Bool=false) =
+    throw(ArgumentError("It is not possible to construct a `DataFrame` from " *
+                        "`$(typeof(columns))` without allocating new columns: " *
+                        "use `DataFrame(...)` instead"))
 
-# Initialize an empty DataFrame with specific eltypes
-function DataFrame(column_eltypes::AbstractVector{T}, nrows::Integer) where T<:Type
-    return DataFrame(column_eltypes, gennames(length(column_eltypes)), nrows)
-end
+
+DataFrame!(column_eltypes::AbstractVector{<:Type}, cnames::AbstractVector{Symbol},
+           nrows::Integer=0; makeunique::Bool=false)::DataFrame =
+    throw(ArgumentError("It is not possible to construct an uninitialized `DataFrame`" *
+                        "without allocating new columns: use `DataFrame(...)` instead"))
 
 ##############################################################################
 ##
@@ -813,11 +820,11 @@ function Base.copy(df::DataFrame; copycols::Bool=true)
 end
 
 """
-    deletecols!(df::DataFrame, ind)
+    deletecols!(df::DataFrame, inds)
 
-Delete columns specified by `ind` from a `DataFrame` `df` in place and return it.
+Delete columns specified by `inds` from a `DataFrame` `df` in place and return it.
 
-Argument `ind` can be any index that is allowed for column indexing of
+Argument `inds` can be any index that is allowed for column indexing of
 a `DataFrame` provided that the columns requested to be removed are unique.
 
 ### Examples
@@ -866,11 +873,57 @@ deletecols!(df::DataFrame, c::Int) = deletecols!(df, [c])
 deletecols!(df::DataFrame, c::Any) = deletecols!(df, index(df)[c])
 
 """
-    deleterows!(df::DataFrame, ind)
+    deletecols(df::DataFrame, inds, copycols::Bool=true)
 
-Delete rows specified by `ind` from a `DataFrame` `df` in place and return it.
+Create a new `DataFrame` based on `df ` deleting columns specified by `inds`.
 
-Internally `deleteat!` is called for all columns so `ind` must
+Argument `inds` can be any index that is allowed for column indexing of
+a `DataFrame` provided that the columns requested to be removed are unique.
+
+If `copycols=true` (the default), then returned `DataFrame` holds
+copies of column vectors in `df`.
+If `copycols=false`, then returned `DataFrame` shares column vectors with `df`.
+
+### Examples
+
+```jldoctest
+julia> d = DataFrame(a=1:3, b=4:6)
+3×2 DataFrame
+│ Row │ a     │ b     │
+│     │ Int64 │ Int64 │
+├─────┼───────┼───────┤
+│ 1   │ 1     │ 4     │
+│ 2   │ 2     │ 5     │
+│ 3   │ 3     │ 6     │
+
+julia> deletecols(d, 1)
+3×1 DataFrame
+│ Row │ b     │
+│     │ Int64 │
+├─────┼───────┤
+│ 1   │ 4     │
+│ 2   │ 5     │
+│ 3   │ 6     │
+```
+
+"""
+function deletecols(df::DataFrame, inds; copycols::Bool=true)
+    newdf = copy(df, copycols=false)
+    deletecols!(newdf, inds)
+    if copycols
+        for i in axes(newdf, 2)
+            newdf[i] = copy(newdf[i])
+        end
+    end
+    return newdf
+end
+
+"""
+    deleterows!(df::DataFrame, inds)
+
+Delete rows specified by `inds` from a `DataFrame` `df` in place and return it.
+
+Internally `deleteat!` is called for all columns so `inds` must
 be: a vector of sorted and unique integers, a boolean vector or an integer.
 
 ### Examples
@@ -895,23 +948,116 @@ julia> deleterows!(d, 2)
 ```
 
 """
-function deleterows!(df::DataFrame, ind)
-    if !isempty(ind) && size(df, 2) == 0
+function deleterows!(df::DataFrame, inds)
+    if !isempty(inds) && size(df, 2) == 0
         throw(BoundsError())
     end
     # we require ind to be stored and unique like in Base
-    foreach(col -> deleteat!(col, ind), _columns(df))
+    foreach(col -> deleteat!(col, inds), _columns(df))
     df
 end
 
-function deleterows!(df::DataFrame, ind::AbstractVector{Bool})
-    if length(ind) != size(df, 1)
+function deleterows!(df::DataFrame, inds::AbstractVector{Bool})
+    if length(inds) != size(df, 1)
         throw(BoundsError())
     end
-    drop = findall(ind)
+    drop = findall(inds)
     foreach(col -> deleteat!(col, drop), _columns(df))
     df
 end
+
+"""
+    select!(df::DataFrame, inds)
+
+Mutate `df` in place to retain only columns specified by `inds` and return it.
+
+Argument `inds` can be any index that is allowed for column indexing of
+a `DataFrame` provided that the columns requested to be removed are unique.
+
+### Examples
+
+```jldoctest
+julia> d = DataFrame(a=1:3, b=4:6)
+3×2 DataFrame
+│ Row │ a     │ b     │
+│     │ Int64 │ Int64 │
+├─────┼───────┼───────┤
+│ 1   │ 1     │ 4     │
+│ 2   │ 2     │ 5     │
+│ 3   │ 3     │ 6     │
+
+julia> select!(d, 2)
+3×1 DataFrame
+│ Row │ b     │
+│     │ Int64 │
+├─────┼───────┤
+│ 1   │ 4     │
+│ 2   │ 5     │
+│ 3   │ 6     │
+```
+
+"""
+function select!(df::DataFrame, inds::AbstractVector{Int})
+    indmin, indmax = extrema(inds)
+    if indmin < 1
+        throw(ArgumentError("indices must be positive"))
+    end
+    if indmax > ncol(df)
+        throw(ArgumentError("indices must not be greater than number of columns"))
+    end
+    if !allunique(inds)
+        throw(ArgumentError("indices must not contain duplicates"))
+    end
+    targetnames = _names(df)[inds]
+    deletecols!(df, setdiff(axes(df, 2), inds))
+    permutecols!(df, targetnames)
+end
+
+select!(df::DataFrame, c::Int) = select!(df, [c])
+select!(df::DataFrame, c::Any) = select!(df, index(df)[c])
+
+"""
+    select(df::DataFrame, inds, copycols::Bool=true)
+
+Create a new `DataFrame` that contains columns from `df` specified by `inds` and return it.
+
+Argument `inds` can be any index that is allowed for column indexing of a `DataFrame`.
+
+If `copycols=true` (the default), then returned `DataFrame` holds
+copies of column vectors in `df`.
+If `copycols=false`, then returned `DataFrame` shares column vectors with `df`.
+
+### Examples
+
+```jldoctest
+julia> d = DataFrame(a=1:3, b=4:6)
+3×2 DataFrame
+│ Row │ a     │ b     │
+│     │ Int64 │ Int64 │
+├─────┼───────┼───────┤
+│ 1   │ 1     │ 4     │
+│ 2   │ 2     │ 5     │
+│ 3   │ 3     │ 6     │
+
+julia> select(d, :b)
+3×1 DataFrame
+│ Row │ b     │
+│     │ Int64 │
+├─────┼───────┤
+│ 1   │ 4     │
+│ 2   │ 5     │
+│ 3   │ 6     │
+```
+
+"""
+select(df::DataFrame, inds::AbstractVector{Int}; copycols::Bool=true) =
+    DataFrame(_columns(df)[inds], Index(_names(df)[inds]),
+              copycols=copycols)
+
+select(df::DataFrame, c::Int; copycols::Bool=true) =
+    select(df, [c], copycols=copycols)
+select(df::DataFrame, c::Any; copycols::Bool=true) =
+    select(df, index(df)[c], copycols=copycols)
 
 ##############################################################################
 ##

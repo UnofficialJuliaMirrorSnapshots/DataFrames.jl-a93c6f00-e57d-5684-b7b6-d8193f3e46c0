@@ -1,25 +1,36 @@
 import Base: @deprecate
 
-@deprecate by(d::AbstractDataFrame, cols, s::Vector{Symbol}) aggregate(d, cols, map(eval, s))
-@deprecate by(d::AbstractDataFrame, cols, s::Symbol) aggregate(d, cols, eval(s))
+@deprecate DataFrame(t::Type, nrows::Integer, ncols::Integer) DataFrame(Matrix{t}(undef, nrows, ncols))
 
-@deprecate nullable!(df::AbstractDataFrame, col::ColumnIndex) allowmissing!(df, col)
-@deprecate nullable!(df::AbstractDataFrame, cols::Vector{<:ColumnIndex}) allowmissing!(df, cols)
-@deprecate nullable!(colnames::Array{Symbol,1}, df::AbstractDataFrame) allowmissing!(df, colnames)
-@deprecate nullable!(colnums::Array{Int,1}, df::AbstractDataFrame) allowmissing!(df, colnums)
+@deprecate DataFrame(column_eltypes::AbstractVector{<:Type},
+                     nrows::Integer) DataFrame(column_eltypes, Symbol.('x' .* string.(1:length(column_eltypes))), nrows)
 
-import Base: keys, values, insert!
-@deprecate keys(df::AbstractDataFrame) names(df)
-@deprecate values(df::AbstractDataFrame) eachcol(df)
+function DataFrame(column_eltypes::AbstractVector{T}, cnames::AbstractVector{Symbol},
+                   categorical::AbstractVector{Bool}, nrows::Integer;
+                   makeunique::Bool=false)::DataFrame where T<:Type
+    Base.depwarn("`DataFrame` constructor with `categorical` positional argument is deprecated. " *
+                 "Instead use `DataFrame(columns, names)` constructor.",
+                 :DataFrame)
+    updated_types = convert(Vector{Type}, column_eltypes)
+    if length(categorical) != length(column_eltypes)
+        throw(DimensionMismatch("arguments column_eltypes and categorical must have the same length " *
+                                "(got $(length(column_eltypes)) and $(length(categorical)))"))
+    end
+    for i in eachindex(categorical)
+        categorical[i] || continue
+        elty = CategoricalArrays.catvaluetype(Missings.T(updated_types[i]),
+                                              CategoricalArrays.DefaultRefType)
+        if updated_types[i] >: Missing
+            updated_types[i] = Union{elty, Missing}
+        else
+            updated_types[i] = elty
+        end
+    end
+    return DataFrame(updated_types, cnames, nrows, makeunique=makeunique)
+end
+
+import Base: insert!
 @deprecate insert!(df::DataFrame, df2::AbstractDataFrame) (foreach(col -> df[col] = df2[col], names(df2)); df)
-
-@deprecate pool categorical
-@deprecate pool! categorical!
-
-@deprecate complete_cases! dropmissing!
-@deprecate complete_cases completecases
-
-@deprecate sub(df::AbstractDataFrame, rows) view(df, rows, :)
 
 ## write.table
 export writetable
@@ -1311,16 +1322,6 @@ macro tsv_str(s, flags...)
                  :tsv_str)
     inlinetable(s, flags...; separator='\t')
 end
-
-@deprecate rename!(x::AbstractDataFrame, from::AbstractArray, to::AbstractArray) rename!(x, [f=>t for (f, t) in zip(from, to)])
-@deprecate rename!(x::AbstractDataFrame, from::Symbol, to::Symbol) rename!(x, from => to)
-@deprecate rename!(x::Index, f::Function) rename!(f, x)
-@deprecate rename(x::AbstractDataFrame, from::AbstractArray, to::AbstractArray) rename(x, [f=>t for (f, t) in zip(from, to)])
-@deprecate rename(x::AbstractDataFrame, from::Symbol, to::Symbol) rename(x, from => to)
-@deprecate rename(x::Index, f::Function) rename(f, x)
-
-import Base: vcat
-@deprecate vcat(x::Vector{<:AbstractDataFrame}) vcat(x...)
 
 @deprecate showcols(df::AbstractDataFrame, all::Bool=false, values::Bool=true) describe(df, :eltype, :nmissing, :first, :last)
 @deprecate showcols(io::IO, df::AbstractDataFrame, all::Bool=false, values::Bool=true) show(io, describe(df, :eltype, :nmissing, :first, :last), all)

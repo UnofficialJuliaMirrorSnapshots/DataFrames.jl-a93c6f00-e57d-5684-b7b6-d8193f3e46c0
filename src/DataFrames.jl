@@ -19,6 +19,7 @@ using Base.Sort, Base.Order, Base.Iterators
 
 export AbstractDataFrame,
        DataFrame,
+       DataFrame!,
        DataFrameRow,
        GroupedDataFrame,
        SubDataFrame,
@@ -30,6 +31,7 @@ export AbstractDataFrame,
        combine,
        completecases,
        deletecols!,
+       deletecols,
        deleterows!,
        describe,
        disallowmissing!,
@@ -50,6 +52,8 @@ export AbstractDataFrame,
        order,
        rename!,
        rename,
+       select,
+       select!,
        showcols,
        stack,
        stackdf,
@@ -83,11 +87,10 @@ include("abstractdataframe/iteration.jl")
 include("abstractdataframe/join.jl")
 include("abstractdataframe/reshape.jl")
 
-include("abstractdataframe/io.jl")
-
 include("abstractdataframe/show.jl")
 include("groupeddataframe/show.jl")
 include("dataframerow/show.jl")
+include("abstractdataframe/io.jl")
 
 include("abstractdataframe/sort.jl")
 include("dataframe/sort.jl")
