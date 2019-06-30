@@ -8,7 +8,7 @@ module DataFrames
 
 using Statistics, Printf, REPL
 using Reexport, StatsBase, SortingAlgorithms, Compat, Unicode, PooledArrays
-@reexport using CategoricalArrays, Missings
+@reexport using CategoricalArrays, Missings, InvertedIndices
 using Base.Sort, Base.Order, Base.Iterators
 
 ##############################################################################
@@ -54,7 +54,6 @@ export AbstractDataFrame,
        rename,
        select,
        select!,
-       showcols,
        stack,
        stackdf,
        unique!,
@@ -65,6 +64,10 @@ if VERSION >= v"1.1.0-DEV.792"
     import Base.eachcol, Base.eachrow
 else
     export eachcol, eachrow
+end
+
+if VERSION < v"1.2"
+    export hasproperty
 end
 
 ##############################################################################
