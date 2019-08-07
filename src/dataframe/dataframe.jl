@@ -1047,10 +1047,10 @@ function categorical!(df::DataFrame, cnames::AbstractVector{<:ColumnIndex};
     df
 end
 
-categorical!(df::DataFrame, cnames::Union{Regex, Not}; compress::Bool=false) =
+categorical!(df::DataFrame, cnames::Union{Regex, Not, Colon}; compress::Bool=false) =
     categorical!(df, index(df)[cnames], compress=compress)
 
-function categorical!(df::DataFrame, cnames::Colon=:; compress::Bool=false)
+function categorical!(df::DataFrame; compress::Bool=false)
     for i in 1:size(df, 2)
         if eltype(df[!, i]) <: Union{AbstractString, Missing}
             df[!, i] = categorical(df[!, i], compress)
@@ -1116,7 +1116,7 @@ function Base.append!(df1::DataFrame, df2::AbstractDataFrame)
     end
     ncol(df2) == 0 && return df1
 
-    _names(df1) == _names(df2) || error("Column names do not match")
+    _names(df1) == _names(df2) || throw(ArgumentError("Column names do not match"))
     nrows, ncols = size(df1)
     targetrows = nrows + nrow(df2)
     current_col = 0
