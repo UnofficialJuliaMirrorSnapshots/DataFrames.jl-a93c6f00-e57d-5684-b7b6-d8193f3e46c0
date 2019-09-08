@@ -18,7 +18,7 @@ function DataFrame(column_eltypes::AbstractVector{T}, cnames::AbstractVector{Sym
     end
     for i in eachindex(categorical)
         categorical[i] || continue
-        elty = CategoricalArrays.catvaluetype(Missings.T(updated_types[i]),
+        elty = CategoricalArrays.catvaluetype(nonmissingtype(updated_types[i]),
                                               CategoricalArrays.DefaultRefType)
         if updated_types[i] >: Missing
             updated_types[i] = Union{elty, Missing}
@@ -1535,3 +1535,5 @@ end
 import Base: setproperty!
 @deprecate setproperty!(df::DataFrame, col_ind::Symbol, v) (df[!, col_ind] .= v)
 @deprecate setproperty!(df::SubDataFrame, col_ind::Symbol, v) (df[:, col_ind] .= v)
+
+@deprecate eltypes(df::AbstractDataFrame) eltype.(eachcol(df))

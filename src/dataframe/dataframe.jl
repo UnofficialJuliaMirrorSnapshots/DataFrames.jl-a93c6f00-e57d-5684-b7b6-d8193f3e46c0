@@ -663,8 +663,10 @@ function insertcols!(df::DataFrame, col_ind::Int, name_col::Pair{Symbol, <:Abstr
     name, item = name_col
     if !(0 < col_ind <= ncol(df) + 1)
         throw(BoundsError("attempt to insert a column to a data frame with $(ncol(df)) columns at index $col_ind"))
+    end  
+    if !(size(df, 1) == length(item) || size(df, 2) == 0)
+        throw(DimensionMismatch("length of new column ($(length(item))) must match the number of rows in data frame ($(nrow(df)))"))
     end
-    size(df, 1) == length(item) || size(df, 2) == 0 || error("number of rows does not match")
 
     if hasproperty(df, name)
         if makeunique
@@ -1052,7 +1054,7 @@ julia> categorical!(df)
 │ 1   │ a            │ 1     │ p            │
 │ 2   │ b            │ 2     │ q            │
 
-julia> eltypes(df)
+julia> eltype.(eachcol(df))
 3-element Array{DataType,1}:
  CategoricalString{UInt32}
  Int64
@@ -1074,7 +1076,7 @@ julia> categorical!(df, :Y, compress=true)
 │ 1   │ a      │ 1            │ p      │
 │ 2   │ b      │ 2            │ q      │
 
-julia> eltypes(df)
+julia> eltype.(eachcol(df))
 3-element Array{DataType,1}:
  String
  CategoricalValue{Int64,UInt8}
