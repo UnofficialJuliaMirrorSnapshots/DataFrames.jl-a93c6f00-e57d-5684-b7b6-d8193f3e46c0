@@ -24,7 +24,7 @@ Base.isequal(x::AbstractIndex, y::AbstractIndex) = _names(x) == _names(y) # it i
 Base.:(==)(x::AbstractIndex, y::AbstractIndex) = isequal(x, y)
 
 
-function names!(x::Index, nms::Vector{Symbol}; makeunique::Bool=false)
+function rename!(x::Index, nms::AbstractVector{Symbol}; makeunique::Bool=false)
     if !makeunique
         if length(unique(nms)) != length(nms)
             dup = unique(nms[nonunique(DataFrame(nms=nms))])
@@ -87,21 +87,10 @@ end
 rename!(x::Index, nms::Pair{Symbol,Symbol}...) = rename!(x::Index, collect(nms))
 rename!(f::Function, x::Index) = rename!(x, [(x=>f(x)) for x in x.names])
 
+rename(x::Index, nms::AbstractVector{Symbol}; makeunique::Bool=false) =
+    rename!(copy(x), nms, makeunique=makeunique)
 rename(x::Index, args...) = rename!(copy(x), args...)
 rename(f::Function, x::Index) = rename!(f, copy(x))
-
-@inline function Base.permute!(x::Index, p::AbstractVector)
-    @boundscheck if !(length(p) == length(x) && isperm(p))
-        throw(ArgumentError("$p is not a valid column permutation for this Index"))
-    end
-    oldnames = copy(_names(x))
-    for (i, j) in enumerate(p)
-        n = oldnames[j]
-        x.names[i] = n
-        x.lookup[n] = i
-    end
-    x
-end
 
 Base.haskey(x::Index, key::Symbol) = haskey(x.lookup, key)
 Base.haskey(x::Index, key::Integer) = 1 <= key <= length(x.names)
